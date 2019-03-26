@@ -14,10 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import glob
+import os
+import shutil
 import sys
 import uuid
 
 from copy import deepcopy
+
+from charmhelpers.contrib.charmsupport import nrpe
 
 from charmhelpers.contrib.openstack.utils import (
     pausable_restart_on_change as restart_on_change,
@@ -66,6 +71,7 @@ from neutron_ovs_utils import (
 
 hooks = Hooks()
 CONFIGS = register_configs()
+NAGIOS_PLUGINS = '/usr/local/lib/nagios/plugins'
 
 
 @hooks.hook()
@@ -219,6 +225,42 @@ def post_series_upgrade():
     log("Running complete series upgrade hook", "INFO")
     series_upgrade_complete(
         resume_unit_helper, CONFIGS)
+
+
+@hooks.hook('nrpe-external-master-relation-joined',
+            'nrpe-external-master-relation-changed')
+def update_nrpe_config():
+    scripts_src = os.path.join(os.environ["CHARM_DIR"], "files",
+                               "nrpe")
+    if not os.path.exists(NAGIOS_PLUGINS):
+        os.makedirs(NAGIOS_PLUGINS)
+    for fname in glob.glob(os.path.join(scripts_src, "*")):
+        if os.path.isfile(fname):
+            shutil.copy2(fname, os.path.join(NAGIOS_PLUGINS,
+                                             os.path.basename(fname)))
+
+    cron_src = os.path.join(os.environ["CHARM_DIR"], "files", "cron.d")
+    cron_dst = "/etc/cron.d"
+    for fname in glob.glob(os.path.join(cron_src, "*")):
+        if os.path.isfile(fname):
+            shutil.copy2(fname, os.path.join(cron_dst,
+                                             os.path.basename(fname)))
+
+    hostname = nrpe.get_nagios_hostname()
+    current_unit = nrpe.get_nagios_unit_name()
+    nrpe_setup = nrpe.NRPE(hostname=hostname)
+    monitored_services = ['openvswitch-switch',
+                          'neutron-plugin-openvswitch-agent']
+    nrpe.add_init_service_checks(nrpe_setup,
+                                 monitored_services, current_unit)
+    nrpe_setup.write()
+    nrpe_setup.add_check(
+        shortname='check_ovs_tunnels',
+        description='Check OVS tunnels present {%s}' % current_unit,
+        check_cmd=('{}/check_status_file.py -f '
+                   '/var/lib/nagios/neutron-check-tun_ids.txt'
+                   ''.format(NAGIOS_PLUGINS)))
+    nrpe_setup.write()
 
 
 def main():

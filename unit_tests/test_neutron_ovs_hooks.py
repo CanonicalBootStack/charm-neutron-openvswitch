@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from mock import MagicMock, patch, mock_open
+from mock import ANY, MagicMock, patch, mock_open
 
 from test_utils import CharmTestCase
 
@@ -251,3 +251,16 @@ class NeutronOVSHooksTests(CharmTestCase):
     def test_amqp_departed(self):
         self._call_hook('amqp-relation-departed')
         self.assertTrue(self.CONFIGS.write.called_with(NEUTRON_CONF))
+
+    @patch('os.path.exists')
+    @patch('shutil.copy2')
+    @patch('neutron_ovs_hooks.nrpe')
+    def test_update_nrpe_config(self, mock_nrpe,
+                                mock_copy2, mock_path_exists):
+        mock_copy2.return_value = True
+        mock_path_exists.return_value = True
+        self._call_hook('nrpe-external-master-relation-changed')
+        mock_nrpe.add_init_service_checks.assert_called_with(
+            ANY,
+            ['openvswitch-switch', 'neutron-plugin-openvswitch-agent'],
+            ANY)

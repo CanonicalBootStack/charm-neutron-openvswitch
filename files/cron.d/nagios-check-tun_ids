@@ -1,0 +1,1 @@
+*/5 * * * * root bash -c 'sleep $((RANDOM\%60)) && exec /usr/local/lib/nagios/plugins/check_ovs_tunnels.py >& /var/lib/nagios/neutron-check-tun_ids.txt'
