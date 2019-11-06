@@ -15,6 +15,7 @@
 import collections
 import glob
 import os
+import re
 import socket
 import uuid
 from pci import PCINetDevices
@@ -143,6 +144,42 @@ def validate_nfg_log_path(desired_nfg_log_path):
     return desired_nfg_log_path
 
 
+def get_net_dev():
+    return os.listdir('/sys/class/net')
+
+
+def matches(pattern, strings):
+    '''
+    >>> matches(r'eth', ['eth1', 'veth', 'br1'])
+    ['eth1', 'veth']
+    '''
+    regexp = re.compile(pattern)
+    l = [s for s in strings if regexp.search(s)]
+    return l
+
+
+def expand_net_devs(whitelist, devicelist):
+    '''
+    expand_net_devs('physnet1:eno2 physnet2:enp(216|131)s0f1',
+        ['lxcbr0', 'eno2', 'enp131s0f1'])
+    # 'physnet1:eno2,physnet2:enp131s0f1'
+    '''
+    res = []
+    for entry in whitelist:
+        label, devpattern = entry.split(':')
+        m = matches(devpattern, devicelist)
+        log(("Matched {} devices for pattern {}, out of "
+             "total: {}").format(m, devpattern, devicelist))
+        if len(m) != 1:
+            raise Exception(
+                "Need exactly 1 match for {} in device list {}".format(
+                    devpattern, devicelist)
+            )
+        res.append("{}:{}".format(label, m[0]))
+    log("Expanded sriov mapping: {}". format(res))
+    return ",".join(res)
+
+
 class OVSPluginContext(context.NeutronContext):
     interfaces = []
 
@@ -219,9 +256,8 @@ class OVSPluginContext(context.NeutronContext):
 
         sriov_mappings = config('sriov-device-mappings')
         if sriov_mappings:
-            ovs_ctxt['sriov_device_mappings'] = (
-                ','.join(sriov_mappings.split())
-            )
+            ovs_ctxt['sriov_device_mappings'] = \
+                expand_net_devs(sriov_mappings.split(), get_net_dev())
 
         enable_sriov = config('enable-sriov')
         if enable_sriov:
