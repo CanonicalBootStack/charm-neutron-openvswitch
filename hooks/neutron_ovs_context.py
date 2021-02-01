@@ -56,7 +56,8 @@ from charmhelpers.core.unitdata import kv
 
 IPTABLES_HYBRID = 'iptables_hybrid'
 OPENVSWITCH = 'openvswitch'
-VALID_FIREWALL_DRIVERS = (IPTABLES_HYBRID, OPENVSWITCH)
+NOOP_DRIVER = 'neutron.agent.firewall.NoopFirewallDriver'
+VALID_FIREWALL_DRIVERS = (IPTABLES_HYBRID, OPENVSWITCH, NOOP_DRIVER)
 
 NFG_LOG_RATE_LIMIT_MIN = 100
 NFG_LOG_BURST_LIMIT_MIN = 25
